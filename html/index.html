@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Pi-ZeroW Recorder</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pi Recorder">
+<meta name="theme-color" content="#09090b">
+
+<style>
+  :root {
+    --bg: #09090b;
+    --card: #18181b;
+    --border: #27272a;
+    --text: #f4f4f5;
+    --muted: #a1a1aa;
+    --primary: #ef4444;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --btn-stop: #3f3f46;
+    --accent: #3b82f6;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  body { background: var(--bg); color: var(--text); padding: 16px; min-height: 100vh; }
+  .container { max-width: 480px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 16px; }
+  h1 { font-size: 20px; font-weight: 700; color: #fff; letter-spacing: 0.5px; }
+  .sub { font-size: 12px; color: var(--muted); margin-top: 4px; display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  
+  .badge-bt { background: #1e3a8a; color: #93c5fd; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+  .badge-fqdn {
+    background: #182234; color: #60a5fa; border: 1px solid #1e3a8a;
+    padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600;
+    text-decoration: none; display: inline-flex; align-items: center; gap: 4px;
+    transition: 0.15s;
+  }
+  .badge-fqdn:hover { background: #1e3a8a; color: #fff; }
+
+  /* クイックツールバー */
+  .quick-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+  .btn-quick {
+    background: #141418; border: 1px solid var(--border); border-radius: 10px;
+    padding: 10px 4px; font-size: 12px; font-weight: 600; color: var(--text);
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+    cursor: pointer; transition: 0.15s; text-align: center;
+  }
+  .btn-quick:active { transform: scale(0.97); background: #27272a; }
+  
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); }
+  
+  .status-box { text-align: center; padding: 10px 0; }
+  .badge { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; text-transform: uppercase; }
+  .badge-idle { background: #27272a; color: #a1a1aa; }
+  .badge-rec { background: #7f1d1d; color: #fca5a5; animation: pulse 1.5s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  
+  .timer { font-size: 42px; font-weight: 800; font-variant-numeric: tabular-nums; margin: 12px 0; color: #fff; }
+  
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 10px; }
+  button { border: none; border-radius: 12px; padding: 16px; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  button:active { transform: scale(0.97); }
+  .btn-record { background: var(--primary); color: #fff; }
+  .btn-record:disabled { background: #3f3f46; color: #71717a; cursor: not-allowed; }
+  .btn-stop { background: var(--btn-stop); color: #fff; }
+  .btn-stop:disabled { opacity: 0.4; cursor: not-allowed; }
+  
+  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 12px; margin-top: 14px; }
+  .info-val { font-weight: 700; color: var(--text); font-size: 14px; }
+
+  /* Wi-Fi Control Card */
+  .wifi-card { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; background: #121214; border: 1px solid var(--border); border-radius: 10px; margin-top: 12px; }
+  .wifi-info { font-size: 12px; display: flex; flex-direction: column; gap: 2px; }
+  .wifi-status { font-weight: 700; font-size: 13px; }
+  .wifi-on { color: var(--success); }
+  .wifi-off { color: var(--muted); }
+
+  
+  .files-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .files-title { font-size: 15px; font-weight: 700; }
+  .btn-reload { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 4px 10px; border-radius: 8px; font-size: 12px; cursor: pointer; }
+  
+  .file-list { display: flex; flex-direction: column; gap: 10px; }
+  .file-item { background: #121214; border: 1px solid var(--border); border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+  .file-info { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; }
+  .file-sub { font-size: 11px; color: var(--muted); display: flex; gap: 8px; }
+  .badge-repaired { background: #064e3b; color: #6ee7b7; padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+  audio { width: 100%; height: 32px; margin-top: 4px; }
+  .file-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 6px; font-weight: 600; text-decoration: none; cursor: pointer; border: none; }
+  .btn-dl { background: #27272a; color: #fff; }
+  .btn-loud { background: #1e3a8a; color: #93c5fd; border: 1px solid #3b82f6 !important; }
+  .btn-loud:active { transform: scale(0.96); }
+  .btn-del { background: #450a0a; color: #f87171; }
+  .btn-disabled { opacity: 0.3 !important; cursor: not-allowed !important; pointer-events: none; }
+
+  .badge-writing {
+    background: #581c1c; color: #fca5a5; padding: 1px 7px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; animation: pulse 1.5s infinite;
+  }
+  .file-item.writing {
+    border-color: #7f1d1d;
+    background: #1a0f11;
+  }
+
+  /* モーダル共通スタイル */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; padding: 16px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .modal-overlay.active { opacity: 1; pointer-events: auto; }
+  .modal-box {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 20px; width: 100%; max-width: 440px;
+    max-height: 85vh; overflow-y: auto;
+    box-shadow: 0 16px 36px rgba(0, 0, 0, 0.8);
+    transform: scale(0.94); transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .modal-overlay.active .modal-box { transform: scale(1); }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  .modal-title { font-size: 16px; font-weight: 700; color: #fff; }
+  .btn-modal-close { background: transparent; border: none; font-size: 20px; color: var(--muted); cursor: pointer; padding: 4px; }
+
+  .modal-section { margin-bottom: 16px; }
+  .modal-section-title { font-size: 13px; font-weight: 700; color: #93c5fd; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  
+  /* フォーム要素 */
+  .form-group { margin-bottom: 10px; }
+  .form-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; display: block; }
+  .form-input {
+    width: 100%; background: #121214; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; color: #fff; font-size: 13px;
+  }
+  .form-input:focus { outline: none; border-color: var(--accent); }
+  .btn-submit {
+    width: 100%; background: var(--accent); color: #fff; padding: 12px;
+    font-size: 14px; font-weight: 700; border: none; border-radius: 10px; cursor: pointer; margin-top: 6px;
+  }
+  .btn-submit:active { transform: scale(0.97); }
+
+  /* リストカード */
+  .sub-list { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto; }
+  .sub-list-item {
+    background: #121214; border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; font-size: 12px;
+  }
+  .sub-list-item:hover { background: #1a1a20; }
+  .btn-sub-action {
+    background: #27272a; border: 1px solid var(--border); color: #fff;
+    padding: 4px 8px; border-radius: 6px; font-size: 11px; cursor: pointer; font-weight: 600;
+  }
+  .btn-sub-del { background: #450a0a; color: #f87171; border-color: #7f1d1d; }
+  
+  .modal-target {
+    font-size: 13px; font-weight: 600; color: #fca5a5; background: #121214;
+    border: 1px solid var(--border); padding: 10px 12px; border-radius: 8px;
+    word-break: break-all; margin-bottom: 18px;
+  }
+  .modal-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .btn-modal-cancel {
+    background: #27272a; color: var(--text); padding: 12px;
+    font-size: 14px; font-weight: 600; border: none; border-radius: 10px; cursor: pointer;
+  }
+  .btn-modal-delete {
+    background: var(--primary); color: #fff; padding: 12px;
+    font-size: 14px; font-weight: 700; border: none; border-radius: 10px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1 id="mainTitle">Pi-ZeroW USB Recorder</h1>
+    <div class="sub">
+      <span>Digital UAC2 Capture</span>
+      <span id="btBadge" class="badge-bt">🔵 BT: --</span>
+      <a id="fqdnLink" href="#" target="_blank" class="badge-fqdn">🌐 <span id="fqdnText">読み込み中...</span></a>
+    </div>
+  </header>
+
+  <!-- クイックバー -->
+  <div class="quick-bar">
+    <button class="btn-quick" onclick="openWifiModal()">📶 Wi-Fi / テザリング</button>
+    <button class="btn-quick" onclick="openBtModal()">🎧 Bluetooth</button>
+    <button id="btnUsbReconnect" class="btn-quick" style="border-color:#1e3a8a; color:#93c5fd;" onclick="reconnectUsb()">🔄 USB再接続</button>
+  </div>
+
+  <div class="card">
+    <div class="status-box">
+      <span id="recBadge" class="badge badge-idle">待機中 (IDLE)</span>
+      <div id="recTimer" class="timer">00:00:00</div>
+      <div id="recFilename" style="font-size:12px; color:var(--muted); height:16px;"></div>
+    </div>
+    
+    <div class="controls">
+      <button id="btnStart" class="btn-record" onclick="startRec()">⏺ 録音開始</button>
+      <button id="btnStop" class="btn-stop" onclick="stopRec()" disabled>⏹ 録音停止</button>
+    </div>
+    <div style="font-size:11px; color:#93c5fd; text-align:center; margin-top:10px; background:#121826; border:1px solid #1e3a8a; border-radius:8px; padding:6px 10px; display:flex; align-items:center; justify-content:center; gap:6px; font-weight:600;">
+      <span>🔊 ソース音量 MAX 推奨</span>
+    </div>
+
+    <div class="info-grid">
+      <div>microSD 空き容量:<br><span id="diskFree" class="info-val">-- GB</span></div>
+      <div>残り録音可能:<br><span id="hoursLeft" class="info-val">約 -- 時間</span></div>
+    </div>
+
+    <!-- Wi-Fi 概要ステータスカード（重複操作ボタンを排しステータス表示に純化） -->
+    <div class="wifi-card">
+      <div class="wifi-info" style="width:100%; display:flex; justify-content:space-between; align-items:center;">
+        <span style="color:var(--muted);">ネットワーク接続状況</span>
+        <span id="wifiStatus" class="wifi-status wifi-on">📶 確認中...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="files-header">
+      <div class="files-title">録音ファイル一覧 (<span id="fileCount">0</span>)</div>
+      <button class="btn-reload" onclick="loadFiles()">更新</button>
+    </div>
+    <div id="fileList" class="file-list">
+      <div style="text-align:center; color:var(--muted); font-size:13px; padding:20px;">読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Wi-Fi / テザリング管理モーダル -->
+<div id="wifiModal" class="modal-overlay" onclick="onModalBgClick(event, 'wifiModal')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">📶 Wi-Fi & テザリング設定</div>
+      <button class="btn-modal-close" onclick="closeWifiModal()">✕</button>
+    </div>
+
+    <!-- 現在のステータス -->
+    <div class="modal-section">
+      <div class="modal-section-title">現在の接続状況</div>
+      <div id="wifiCurrentDetails" style="background:#121214; border:1px solid var(--border); border-radius:8px; padding:10px; font-size:12px; color:var(--muted);">
+        読み込み中...
+      </div>
+    </div>
+
+    <!-- スマホ・テザリング新規登録フォーム -->
+    <div class="modal-section">
+      <div class="modal-section-title">📱 スマホ・テザリングを追加</div>
+      <div class="form-group">
+        <label class="form-label">SSID (Wi-Fi名)</label>
+        <input id="wifiInputSsid" class="form-input" placeholder="例: MyPhone_AP">
+      </div>
+      <div class="form-group">
+        <label class="form-label">パスワード (WPA2-PSK)</label>
+        <input id="wifiInputPw" type="password" class="form-input" placeholder="パスワードを入力">
+      </div>
+      <div class="form-group">
+        <label class="form-label">接続優先度 (外出先テザリングは 80 推奨)</label>
+        <input id="wifiInputPrio" type="number" class="form-input" value="80">
+      </div>
+      <button id="btnAddWifi" class="btn-submit" onclick="submitAddWifi()">登録して接続</button>
+    </div>
+
+    <!-- 周囲のWi-Fiスキャン -->
+    <div class="modal-section">
+      <div class="modal-section-title">
+        <span>🔍 周囲のWi-Fi検索</span>
+        <button class="btn-sub-action" onclick="scanWifi()">再スキャン</button>
+      </div>
+      <div id="wifiScanList" class="sub-list">
+        <div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">「再スキャン」を押して検索</div>
+      </div>
+    </div>
+
+    <!-- 保存済み接続プロファイル一覧 -->
+    <div class="modal-section">
+      <div class="modal-section-title">
+        <span>📋 登録済みWi-Fi一覧</span>
+        <button class="btn-sub-action" onclick="restoreHotspot()" style="color:#60a5fa; border-color:#1e3a8a;">🔄 初期AP復元</button>
+      </div>
+      <div id="wifiSavedList" class="sub-list">
+        <div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">読み込み中...</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Bluetooth 設定モーダル -->
+<div id="btModal" class="modal-overlay" onclick="onModalBgClick(event, 'btModal')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title">🎧 Bluetooth イヤホン設定</div>
+      <button class="btn-modal-close" onclick="closeBtModal()">✕</button>
+    </div>
+
+    <!-- 現在のBTステータス -->
+    <div class="modal-section">
+      <div class="modal-section-title">Bluetooth 状態</div>
+      <div id="btCurrentDetails" style="background:#121214; border:1px solid var(--border); border-radius:8px; padding:10px; font-size:12px; color:var(--muted);">
+        読み込み中...
+      </div>
+    </div>
+
+    <!-- ペアリング済み機器（保存済み） -->
+    <div class="modal-section">
+      <div class="modal-section-title">
+        <span>💾 ペアリング済み機器</span>
+        <button id="btnBtPairedReload" class="btn-sub-action" onclick="loadBtPaired()">更新</button>
+      </div>
+      <div id="btPairedList" class="sub-list">
+        <div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">読み込み中...</div>
+      </div>
+    </div>
+
+    <!-- 周囲のBluetoothデバイススキャン -->
+    <div class="modal-section">
+      <div class="modal-section-title">
+        <span>🔍 周囲のイヤホンを検索</span>
+        <button id="btnBtScan" class="btn-sub-action" onclick="scanBt()">スキャン開始</button>
+      </div>
+      <div id="btScanList" class="sub-list">
+        <div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">「スキャン開始」を押してください</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 削除確認 CSS モーダル -->
+<div id="deleteModal" class="modal-overlay" onclick="onModalBgClick(event, 'deleteModal')">
+  <div class="modal-box">
+    <div class="modal-title">🗑️ 録音ファイルの削除</div>
+    <div class="modal-desc">この操作は取り消せません。本当に削除しますか？</div>
+    <div id="modalTargetFile" class="modal-target">--</div>
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" onclick="closeDeleteModal()">キャンセル</button>
+      <button id="btnModalDelete" class="btn-modal-delete" onclick="executeDelete()">削除する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let isRec = false;
+let startTime = 0;
+let timerInterval = null;
+
+function formatSec(sec) {
+  const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+  const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+  const s = String(Math.floor(sec % 60)).padStart(2, '0');
+  return `${h}:${m}:${s}`;
+}
+
+async function updateStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    
+    document.getElementById('diskFree').textContent = data.free_gb + ' GB';
+    document.getElementById('hoursLeft').textContent = '約 ' + data.hours_left + ' 時間';
+    
+    // Bluetooth 名
+    if (data.bt_name) {
+      document.getElementById('btBadge').textContent = '🔵 BT: ' + data.bt_name;
+    }
+    
+    // 本体名称の動的タイトル反映
+    if (data.model_name) {
+      const titleElem = document.getElementById('mainTitle');
+      if (titleElem) {
+        titleElem.textContent = `${data.model_name} USB Recorder`;
+      }
+    }
+
+    // FQDN
+    if (data.fqdn) {
+      const fqdnLink = document.getElementById('fqdnLink');
+      const fqdnText = document.getElementById('fqdnText');
+      const port = data.port || 8080;
+      const url = `http://${data.fqdn}:${port}/`;
+      fqdnLink.href = url;
+      fqdnText.textContent = `${data.fqdn}:${port}`;
+    }
+
+    // Wi-Fi 状態
+    const wifiStatusElem = document.getElementById('wifiStatus');
+    if (wifiStatusElem) {
+      if (data.wifi_active) {
+        wifiStatusElem.textContent = '📶 有効 (ON)';
+        wifiStatusElem.className = 'wifi-status wifi-on';
+      } else {
+        wifiStatusElem.textContent = '❌ 停止中 (OFF)';
+        wifiStatusElem.className = 'wifi-status wifi-off';
+      }
+    }
+    
+    // 録音中状態
+    if (data.recording) {
+      if (!isRec) {
+        isRec = true;
+        startTime = Date.now() - (data.duration_sec * 1000);
+        document.getElementById('btnStart').disabled = true;
+        document.getElementById('btnStop').disabled = false;
+        const b = document.getElementById('recBadge');
+        b.textContent = '録音中 (REC)';
+        b.className = 'badge badge-rec';
+        
+        if (timerInterval) clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          document.getElementById('recTimer').textContent = formatSec(elapsed);
+        }, 500);
+      }
+      document.getElementById('recFilename').textContent = data.current_file || '';
+    } else {
+      if (isRec) {
+        isRec = false;
+        if (timerInterval) {
+          clearInterval(timerInterval);
+          timerInterval = null;
+        }
+        document.getElementById('recTimer').textContent = '00:00:00';
+        document.getElementById('btnStart').disabled = false;
+        document.getElementById('btnStop').disabled = true;
+        const b = document.getElementById('recBadge');
+        b.textContent = '待機中 (IDLE)';
+        b.className = 'badge badge-idle';
+        document.getElementById('recFilename').textContent = '';
+      }
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+async function startRec() {
+  document.getElementById('btnStart').disabled = true;
+  
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const clientTime = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const clientEpoch = Math.floor(now.getTime() / 1000);
+
+  await fetch('/api/start', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      client_time: clientTime,
+      client_epoch: clientEpoch
+    })
+  });
+  await updateStatus();
+  await loadFiles();
+}
+
+async function stopRec() {
+  document.getElementById('btnStop').disabled = true;
+  await fetch('/api/stop', { method: 'POST' });
+  await updateStatus();
+  await new Promise(r => setTimeout(r, 400));
+  await loadFiles();
+}
+
+let fileToDelete = null;
+
+function deleteFile(name) {
+  fileToDelete = name;
+  document.getElementById('modalTargetFile').textContent = name;
+  document.getElementById('deleteModal').classList.add('active');
+}
+
+function closeDeleteModal() {
+  fileToDelete = null;
+  document.getElementById('deleteModal').classList.remove('active');
+}
+
+function onModalBgClick(e, modalId) {
+  if (e.target.id === modalId) {
+    if (modalId === 'deleteModal') closeDeleteModal();
+    if (modalId === 'wifiModal') closeWifiModal();
+    if (modalId === 'btModal') closeBtModal();
+  }
+}
+
+async function executeDelete() {
+  if (!fileToDelete) return;
+  const target = fileToDelete;
+  const btn = document.getElementById('btnModalDelete');
+  btn.disabled = true;
+  btn.textContent = '削除中...';
+  
+  try {
+    await fetch('/api/delete/' + encodeURIComponent(target), { method: 'POST' });
+  } catch (e) {
+    console.error(e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '削除する';
+    closeDeleteModal();
+    await loadFiles();
+    await updateStatus();
+  }
+}
+
+async function loadFiles() {
+  try {
+    const res = await fetch('/api/files');
+    const list = await res.json();
+    document.getElementById('fileCount').textContent = list.length;
+    
+    const container = document.getElementById('fileList');
+    if (list.length === 0) {
+      container.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:13px; padding:20px;">録音ファイルはありません</div>';
+      return;
+    }
+    
+    let html = '';
+    list.forEach(f => {
+      const isWriting = f.writing === true;
+      const repairBadge = f.repaired ? '<span class="badge-repaired">自動修復済</span>' : '';
+      const writingBadge = isWriting ? '<span class="badge-writing">🔴 書き込み中...</span>' : '';
+      const itemClass = isWriting ? 'file-item writing' : 'file-item';
+      
+      const audioControl = isWriting
+        ? '<div style="font-size:11px; color:#fca5a5; padding:6px 0;">※ 録音中（停止後に再生・保存が可能になります）</div>'
+        : `<audio controls preload="none" src="${f.url}"></audio>`;
+
+      const actions = isWriting
+        ? `<div class="file-actions">
+             <button class="btn-sm btn-dl btn-disabled" disabled>⬇️ 原音</button>
+             <button class="btn-sm btn-loud btn-disabled" disabled>🔊 ラウドネス</button>
+             <button class="btn-sm btn-del btn-disabled" disabled>🗑️ 削除</button>
+           </div>`
+        : `<div class="file-actions">
+             <a class="btn-sm btn-dl" href="${f.url}" download="${f.name}">⬇️ 原音</a>
+             <button class="btn-sm btn-loud" onclick="downloadLoudnessNormalized('${f.name}', this)">🔊 ラウドネス保存</button>
+             <button class="btn-sm btn-del" onclick="deleteFile('${f.name}')">🗑️ 削除</button>
+           </div>`;
+
+      html += `
+        <div class="${itemClass}">
+          <div class="file-info">
+            <span>${f.name}</span>
+            <span>${f.size_mb} MB</span>
+          </div>
+          <div class="file-sub">
+            <span>🕒 ${f.duration}</span>
+            <span style="color:#93c5fd; font-weight:600;">🎵 ${f.sample_rate || '44.1 kHz'}</span>
+            <span>📅 ${f.modified}</span>
+            ${writingBadge}
+            ${repairBadge}
+          </div>
+          ${audioControl}
+          ${actions}
+        </div>
+      `;
+    });
+    container.innerHTML = html;
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+/* --- クライアント側ラウドネスノーマライズ処理 --- */
+async function downloadLoudnessNormalized(filename, btnElem) {
+  const origText = btnElem.textContent;
+  const origBg = btnElem.style.background;
+  btnElem.disabled = true;
+  btnElem.textContent = '⏳ 接続中...';
+
+  try {
+    const res = await fetch('/audio/' + encodeURIComponent(filename));
+    if (!res.ok) throw new Error('音声データの取得に失敗しました');
+
+    const contentLength = res.headers.get('Content-Length');
+    const totalBytes = contentLength ? parseInt(contentLength, 10) : 0;
+    const totalMb = totalBytes ? (totalBytes / (1024 * 1024)).toFixed(1) : null;
+
+    let arrayBuffer;
+    if (!res.body || !res.body.getReader) {
+      // ReadableStream 非対応環境への安全フォールバック
+      btnElem.textContent = '⏳ 受信中...';
+      arrayBuffer = await res.arrayBuffer();
+    } else {
+      const reader = res.body.getReader();
+      let receivedBytes = 0;
+      const chunks = [];
+      let lastUiUpdate = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+        receivedBytes += value.length;
+
+        const now = Date.now();
+        if (now - lastUiUpdate > 80 || done) {
+          lastUiUpdate = now;
+          const receivedMb = (receivedBytes / (1024 * 1024)).toFixed(1);
+          if (totalBytes > 0) {
+            const percent = Math.min(100, Math.floor((receivedBytes / totalBytes) * 100));
+            btnElem.textContent = `⏳ ${percent}% (${receivedMb}/${totalMb}MB)`;
+            btnElem.style.background = `linear-gradient(to right, rgba(37,99,235,0.9) ${percent}%, rgba(55,65,81,0.6) ${percent}%)`;
+          } else {
+            btnElem.textContent = `⏳ ${receivedMb}MB 受信中...`;
+          }
+        }
+      }
+
+      btnElem.style.background = origBg;
+      btnElem.textContent = '🔄 展開中...';
+      await new Promise(r => setTimeout(r, 20));
+
+      const combined = new Uint8Array(receivedBytes);
+      let offset = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        combined.set(chunks[i], offset);
+        offset += chunks[i].length;
+        chunks[i] = null; // メモリ早期解放
+      }
+      arrayBuffer = combined.buffer;
+    }
+
+    await processAndDownloadAudio(arrayBuffer, filename, btnElem);
+
+  } catch (e) {
+    alert('ラウドネス処理エラー: ' + e.message);
+  } finally {
+    btnElem.disabled = false;
+    btnElem.textContent = origText;
+    btnElem.style.background = origBg;
+  }
+}
+
+async function processAndDownloadAudio(arrayBuffer, filename, btnElem) {
+  const dataView = new DataView(arrayBuffer);
+  if (arrayBuffer.byteLength < 44) throw new Error('データが短すぎます');
+
+  // RIFF ヘッダー検証
+  const riff = String.fromCharCode(dataView.getUint8(0), dataView.getUint8(1), dataView.getUint8(2), dataView.getUint8(3));
+  if (riff !== 'RIFF') throw new Error('WAVファイルではありません');
+
+  // data チャンクの探索
+  let pos = 12;
+  let dataOffset = 0;
+  while (pos < arrayBuffer.byteLength - 8) {
+    const chunkId = String.fromCharCode(
+      dataView.getUint8(pos), dataView.getUint8(pos+1),
+      dataView.getUint8(pos+2), dataView.getUint8(pos+3)
+    );
+    const chunkSize = dataView.getUint32(pos + 4, true);
+    if (chunkId === 'data') {
+      dataOffset = pos + 8;
+      break;
+    }
+    pos += 8 + chunkSize;
+  }
+
+  if (!dataOffset) dataOffset = 44;
+
+  const sampleCount = Math.floor((arrayBuffer.byteLength - dataOffset) / 2);
+  if (sampleCount === 0) throw new Error('音声データが空です');
+
+  const samples = new Int16Array(arrayBuffer, dataOffset, sampleCount);
+
+  btnElem.textContent = '🔊 解析中...';
+  await new Promise(r => setTimeout(r, 20));
+
+  // 1. ラウドネス（RMSエネルギー）と最大ピークの測定（高速スキャン）
+  let sumSq = 0;
+  let maxPeak = 0;
+  const step = Math.max(1, Math.floor(sampleCount / 200000));
+  let measured = 0;
+  for (let i = 0; i < sampleCount; i += step) {
+    const s = samples[i];
+    const abs = Math.abs(s);
+    if (abs > maxPeak) maxPeak = abs;
+    sumSq += (s * s);
+    measured++;
+  }
+  const rms = Math.sqrt(sumSq / measured);
+
+  // 2. 目標ラウドネスゲインの計算
+  // 【ガードレール】ノイズフロア判定:
+  // ピークが 100 未満（約 -50 dBFS 以下）または RMS が 30 未満の完全無音・極小ノイズデータは、
+  // 暗騒音の爆音化を防ぐため増幅を安全にスキップ（Gain = 1.0倍）
+  let gain = 1.0;
+  const isSilent = (maxPeak < 100 || rms < 30);
+
+  if (isSilent) {
+    btnElem.textContent = '🔇 無音検出 (等倍出力)';
+  } else {
+    const targetRms = 4000.0; // 目標RMS: 約 -18.2 dBFS (標準放送・動画ラウドネス)
+    gain = targetRms / rms;
+    // 最大ゲインを 8.0倍 (約 +18dB) に安全クランプ（ゼロ除算・無限大防止）
+    gain = Math.max(1.0, Math.min(8.0, gain));
+    btnElem.textContent = `💾 変換中 (${gain.toFixed(1)}x)...`;
+  }
+
+  await new Promise(r => setTimeout(r, 60));
+
+  // 3. 適応型ソフトリミッター付きの波形増幅（インプレース直接書き換えでブラウザメモリ消費を半減）
+  const threshold = 28000.0;
+  const headroom = 32767.0 - threshold;
+
+  for (let i = 0; i < sampleCount; i++) {
+    const x = samples[i] * gain;
+    const absX = Math.abs(x);
+    const sign = x < 0 ? -1 : 1;
+
+    if (absX <= threshold) {
+      samples[i] = Math.round(x);
+    } else {
+      const over = absX - threshold;
+      const compressed = threshold + headroom * Math.tanh(over / headroom);
+      samples[i] = Math.round(sign * Math.min(32767, compressed));
+    }
+  }
+
+  // 4. ダウンロード実行（arrayBuffer をそのまま Blob 化）
+  const blob = new Blob([arrayBuffer], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename.replace('.wav', '_loudness.wav');
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+/* --- Wi-Fi モーダル制御 --- */
+function openWifiModal() {
+  document.getElementById('wifiModal').classList.add('active');
+  loadWifiStatus();
+  loadSavedWifi();
+}
+function closeWifiModal() {
+  document.getElementById('wifiModal').classList.remove('active');
+}
+
+async function loadWifiStatus() {
+  const el = document.getElementById('wifiCurrentDetails');
+  try {
+    const res = await fetch('/api/wifi/status');
+    const data = await res.json();
+    if (data.connected) {
+      el.innerHTML = `
+        <div style="color:#22c55e; font-weight:700; margin-bottom:2px;">● 接続中 (${data.mode})</div>
+        <div>SSID: <b>${data.ssid}</b></div>
+        <div>IPアドレス: <b>${data.ip || '取得中...'}</b></div>
+        ${data.signal > 0 ? `<div>信号強度: <b>${data.signal}%</b></div>` : ''}
+      `;
+    } else {
+      el.innerHTML = `
+        <div style="color:#eab308; font-weight:700;">● 未接続</div>
+        <div>IP: ${data.ip || 'なし'}</div>
+      `;
+    }
+  } catch (e) {
+    el.textContent = 'ステータス取得失敗';
+  }
+}
+
+async function scanWifi() {
+  const el = document.getElementById('wifiScanList');
+  el.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">スキャン中... (約3〜5秒)</div>';
+  try {
+    const res = await fetch('/api/wifi/scan');
+    const list = await res.json();
+    if (list.length === 0) {
+      el.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">見つかりませんでした</div>';
+      return;
+    }
+    let html = '';
+    list.forEach(net => {
+      html += `
+        <div class="sub-list-item" onclick="selectScanSsid('${net.ssid}')" style="cursor:pointer;">
+          <div>
+            <b>${net.ssid}</b>
+            <span style="font-size:10px; color:var(--muted); margin-left:4px;">(${net.security})</span>
+          </div>
+          <div>📶 ${net.signal}%</div>
+        </div>
+      `;
+    });
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div style="text-align:center; color:#f87171; font-size:11px; padding:10px;">スキャン失敗</div>';
+  }
+}
+
+function selectScanSsid(ssid) {
+  document.getElementById('wifiInputSsid').value = ssid;
+  document.getElementById('wifiInputPw').focus();
+}
+
+async function loadSavedWifi() {
+  const el = document.getElementById('wifiSavedList');
+  try {
+    const res = await fetch('/api/wifi/saved');
+    const list = await res.json();
+    if (list.length === 0) {
+      el.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">登録済みWi-Fiはありません</div>';
+      return;
+    }
+    let html = '';
+    list.forEach(c => {
+      const isHotspot = (c.name === 'Pi-Recorder-Hotspot');
+      const actionBtn = isHotspot
+        ? '<span style="color:#60a5fa; font-size:11px; font-weight:700; padding:3px 6px; background:#182234; border:1px solid #1e3a8a; border-radius:6px;">🔒 初期AP (保護)</span>'
+        : `<button class="btn-sub-action btn-sub-del" onclick="deleteSavedWifi('${c.name}')">削除</button>`;
+
+      html += `
+        <div class="sub-list-item">
+          <div>
+            <b>${c.name}</b>
+            <span style="font-size:10px; color:var(--muted); margin-left:6px;">優先度: ${c.priority}</span>
+          </div>
+          ${actionBtn}
+        </div>
+      `;
+    });
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div style="text-align:center; color:#f87171; font-size:11px; padding:10px;">取得失敗</div>';
+  }
+}
+
+async function restoreHotspot() {
+  if (!confirm("初期AP親機プロファイル「Pi-Recorder-Hotspot (192.168.4.1)」を再作成・復元しますか？")) return;
+  try {
+    const res = await fetch('/api/wifi/restore_hotspot', { method: 'POST' });
+    const data = await res.json();
+    alert(data.message || '復元が完了しました');
+    await loadSavedWifi();
+  } catch (e) {
+    alert('復元エラー: ' + e);
+  }
+}
+
+async function submitAddWifi() {
+  const ssid = document.getElementById('wifiInputSsid').value.trim();
+  const password = document.getElementById('wifiInputPw').value.trim();
+  const priority = parseInt(document.getElementById('wifiInputPrio').value.trim() || '50');
+  
+  if (!ssid) {
+    alert('SSIDを入力してください');
+    return;
+  }
+  
+  const btn = document.getElementById('btnAddWifi');
+  btn.disabled = true;
+  btn.textContent = '登録中...';
+  
+  try {
+    const res = await fetch('/api/wifi/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ssid, password, priority })
+    });
+    const result = await res.json();
+    alert(result.message || '登録しました');
+    document.getElementById('wifiInputPw').value = '';
+    await loadWifiStatus();
+    await loadSavedWifi();
+  } catch (e) {
+    alert('エラーが発生しました: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '登録して接続';
+  }
+}
+
+async function deleteSavedWifi(name) {
+  if (!confirm(`Wi-Fi設定「${name}」を削除しますか？`)) return;
+  try {
+    const res = await fetch('/api/wifi/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const result = await res.json();
+    await loadSavedWifi();
+  } catch (e) {
+    alert('削除エラー: ' + e);
+  }
+}
+
+/* --- Bluetooth モーダル制御 --- */
+function openBtModal() {
+  document.getElementById('btModal').classList.add('active');
+  loadBtStatus();
+  loadBtPaired();
+}
+function closeBtModal() {
+  document.getElementById('btModal').classList.remove('active');
+}
+
+async function loadBtStatus() {
+  const el = document.getElementById('btCurrentDetails');
+  try {
+    const res = await fetch('/api/bt/status');
+    const data = await res.json();
+    let devHtml = '<div style="color:var(--muted); margin-top:4px;">接続中のオーディオ機器なし</div>';
+    if (data.connected_device) {
+      devHtml = `
+        <div style="color:#22c55e; font-weight:700; margin-top:4px;">● 接続中: ${data.connected_device.name}</div>
+        <div style="font-size:11px; color:var(--muted);">MAC: ${data.connected_device.mac}</div>
+        <button class="btn-sub-action btn-sub-del" style="margin-top:6px;" onclick="disconnectBt('${data.connected_device.mac}')">切断する</button>
+      `;
+    }
+    el.innerHTML = `
+      <div>Bluetooth アダプタ: <b>${data.name}</b> (${data.powered ? 'ON' : 'OFF'})</div>
+      ${devHtml}
+    `;
+  } catch (e) {
+    el.textContent = 'Bluetooth状態取得失敗';
+  }
+}
+
+async function loadBtPaired() {
+  const el = document.getElementById('btPairedList');
+  if (!el) return;
+  el.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">読み込み中...</div>';
+  try {
+    const res = await fetch('/api/bt/paired');
+    const list = await res.json();
+    if (!list || list.length === 0) {
+      el.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">ペアリング済みの機器はありません</div>';
+      return;
+    }
+    let html = '';
+    list.forEach(dev => {
+      const isAudio = dev.is_audio === true;
+      const icon = isAudio ? '🎧' : '📶';
+      const audioBadge = isAudio ? '<span style="background:#1e3a8a; color:#93c5fd; padding:1px 5px; border-radius:4px; font-size:10px; margin-left:6px; font-weight:600;">イヤホン/オーディオ</span>' : '';
+
+      html += `
+        <div class="sub-list-item" style="padding:10px 12px;">
+          <div style="flex:1; margin-right:8px; overflow:hidden;">
+            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+              <span>${icon}</span>
+              <span style="font-weight:700; color:#fff;">${escapeHtml(dev.name)}</span>
+              ${audioBadge}
+            </div>
+            <div style="font-size:10px; color:var(--muted); margin-top:2px;">MAC: ${dev.mac}</div>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button class="btn-sub-action" onclick="connectBt('${dev.mac}', '${escapeJs(dev.name)}')">接続</button>
+            <button class="btn-sub-action btn-sub-del" style="padding:5px 8px;" title="ペアリング解除" onclick="removeBtPaired('${dev.mac}', '${escapeJs(dev.name)}')">🗑️</button>
+          </div>
+        </div>
+      `;
+    });
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div style="text-align:center; color:#f87171; font-size:11px; padding:10px;">ペアリング機器一覧の取得に失敗</div>';
+  }
+}
+
+async function removeBtPaired(mac, name) {
+  const displayName = name ? `「${name}」\n(MAC: ${mac})` : `MAC [${mac}]`;
+  if (!confirm(`Bluetooth機器 ${displayName} のペアリング情報を削除（解除）しますか？\n※次回接続時は再度ペアリング待機モードにして検索する必要があります。`)) return;
+  try {
+    const res = await fetch('/api/bt/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mac })
+    });
+    const result = await res.json();
+    alert(result.message || 'ペアリング情報を削除しました');
+    await loadBtStatus();
+    await loadBtPaired();
+  } catch (e) {
+    alert('削除エラー: ' + e);
+  }
+}
+
+async function scanBt() {
+  const el = document.getElementById('btScanList');
+  const btn = document.getElementById('btnBtScan');
+  btn.disabled = true;
+  btn.textContent = 'スキャン中...';
+  el.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">周囲の機器を検索中... (約5〜6秒)</div>';
+  
+  try {
+    const res = await fetch('/api/bt/scan');
+    const list = await res.json();
+    if (list.length === 0) {
+      el.innerHTML = '<div style="text-align:center; color:var(--muted); font-size:11px; padding:10px;">検出されませんでした</div>';
+      return;
+    }
+    let html = '';
+    list.forEach(dev => {
+      const isAudio = dev.is_audio === true;
+      const hasName = dev.has_name !== false;
+      const icon = isAudio ? '🎧' : '📶';
+      const nameStyle = hasName ? 'font-weight:700; color:#fff;' : 'color:var(--muted); font-style:italic;';
+      const audioBadge = isAudio ? '<span style="background:#1e3a8a; color:#93c5fd; padding:1px 5px; border-radius:4px; font-size:10px; margin-left:6px; font-weight:600;">イヤホン/オーディオ</span>' : '';
+
+      html += `
+        <div class="sub-list-item" style="padding:10px 12px;">
+          <div style="flex:1; margin-right:8px; overflow:hidden;">
+            <div style="display:flex; align-items:center; flex-wrap:wrap; gap:4px;">
+              <span>${icon}</span>
+              <span style="${nameStyle}">${escapeHtml(dev.name)}</span>
+              ${audioBadge}
+            </div>
+            <div style="font-size:10px; color:var(--muted); margin-top:2px;">MAC: ${dev.mac}</div>
+          </div>
+          <button class="btn-sub-action" onclick="connectBt('${dev.mac}', '${escapeJs(dev.name)}')">接続</button>
+        </div>
+      `;
+    });
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div style="text-align:center; color:#f87171; font-size:11px; padding:10px;">スキャン失敗</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'スキャン開始';
+  }
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function escapeJs(str) {
+  if (!str) return '';
+  return String(str).replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+async function connectBt(mac, name) {
+  const displayName = name ? `「${name}」\n(MAC: ${mac})` : `MAC [${mac}]`;
+  if (!confirm(`Bluetooth機器 ${displayName} に接続しますか？`)) return;
+  try {
+    const res = await fetch('/api/bt/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mac })
+    });
+    const result = await res.json();
+    alert(result.message || '接続結果を受信しました');
+    await loadBtStatus();
+    await loadBtPaired();
+  } catch (e) {
+    alert('接続エラー: ' + e);
+  }
+}
+
+async function disconnectBt(mac) {
+  try {
+    const res = await fetch('/api/bt/disconnect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mac })
+    });
+    await loadBtStatus();
+    await loadBtPaired();
+  } catch (e) {
+    alert('切断エラー: ' + e);
+  }
+}
+
+async function reconnectUsb() {
+  const btn = document.getElementById('btnUsbReconnect');
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '⏳ 再接続中 (約3秒)...';
+  try {
+    const res = await fetch('/api/usb/reconnect', { method: 'POST' });
+    const data = await res.json();
+    alert(data.message || 'USB再接続信号を送信しました');
+    await updateStatus();
+  } catch (e) {
+    alert('USB再接続エラー: ' + e);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+  }
+}
+
+updateStatus();
+loadFiles();
+setInterval(updateStatus, 3000);
+</script>
+</body>
+</html>
