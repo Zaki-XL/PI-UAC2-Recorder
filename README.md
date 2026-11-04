@@ -4,13 +4,14 @@ Raspberry Pi Zero W をスマートフォン等のホスト機器と USB OTG ケ
 
 ```mermaid
 flowchart LR
-    Phone["スマートフォン / PC<br>(USB Type-C / OTG対応)"] -- "USB OTG ケーブル 1本<br>(バスパワー給電 & USB Audio)" --> RPi["Raspberry Pi Zero W"]
-    subgraph RPi["Raspberry Pi Zero W"]
-        Gadget["標準 UAC2 USB DAC<br>(48kHz / 16bit 2ch)"]
-        Engine["ContinuousRecorder<br>(時計同期ゼロフィル & シームレス録音)"]
-        WebUI["WebUI (:8080)<br>Wi-Fi・テザリング・BT管理モーダル"]
-        Net["NetworkManager<br>自宅Wi-Fi / テザリング / 自動APフォールバック"]
-        BT["BlueZ Bluetooth<br>ワイヤレスイヤホン接続"]
+    Phone["スマートフォン / PC<br>(USB Type-C / OTG対応)"] -->|"USB OTG ケーブル 1本<br>(バスパワー給電 & 音声入力)"| Gadget
+    Phone <.->|"Wi-Fi / AP 接続<br>(Webブラウザ操作)"| WebUI
+
+    subgraph Pi ["Raspberry Pi Zero W"]
+        Gadget["標準 UAC2 USB DAC<br>(48kHz / 16bit 2ch)"] --> Engine["ContinuousRecorder<br>(無音パディング & シームレス録音)"]
+        WebUI["WebUI (:8080)<br>(録音制御 & 各種設定)"]
+        Net["NetworkManager<br>(自宅Wi-Fi / テザリング / 自動AP)"]
+        BT["BlueZ Bluetooth<br>(イヤホン自動接続 & モニター)"]
     end
 ```
 
