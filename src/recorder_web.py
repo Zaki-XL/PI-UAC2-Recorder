@@ -75,20 +75,50 @@ def load_bluetooth_name():
     except Exception:
         return "raspberrypi"
 
-def ensure_bt_loopback():
+def get_bluez_audio_sink():
     """
-    PipeWire環境下で、スマホのUSB音声（UAC2）をBluetoothイヤホンへ流す
-    pw-loopback プロセスが常駐していることを保証する。
+    PipeWire上のBluetooth Audio Sink (ノード名) を探索
+    pw-link -i から 'bluez_output.*' を抽出
     """
     try:
-        check = subprocess.run(["pgrep", "-f", "pw-loopback"], stdout=subprocess.DEVNULL)
-        if check.returncode != 0:
-            subprocess.Popen(
-                ["pw-loopback", "-C", "alsa_input.platform-20980000.usb.stereo-fallback"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-            )
+        res = subprocess.run(["pw-link", "-i"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=2)
+        for line in res.stdout.splitlines():
+            line_str = line.strip()
+            if "bluez_output" in line_str and ":" in line_str:
+                node_name = line_str.split(":", 1)[0].strip()
+                if node_name:
+                    return node_name
     except Exception:
         pass
+    return None
+
+def ensure_bt_loopback(force_restart=False):
+    """
+    PipeWire環境下で、スマホのUSB音声（UAC2）をBluetoothイヤホンへ中継する
+    pw-loopback プロセスが、接続されたBluetooth Sinkに向けて確実に稼働していることを保証する。
+    """
+    try:
+        sink_name = get_bluez_audio_sink()
+        if not sink_name:
+            # Bluetoothイヤホンが未接続の場合、無駄なループバックは停止
+            if force_restart:
+                subprocess.run(["killall", "-9", "pw-loopback"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+
+        # 既存の pw-loopback が正しい Sink を向いているか確認
+        check = subprocess.run(["pgrep", "-f", f"pw-loopback.*{sink_name}"], stdout=subprocess.DEVNULL)
+        if force_restart or check.returncode != 0:
+            # 既存の全 pw-loopback を終了してクリーンに再起動
+            subprocess.run(["killall", "-9", "pw-loopback"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(0.3)
+            cmd = [
+                "pw-loopback",
+                "-C", "alsa_input.platform-20980000.usb.stereo-fallback",
+                "-P", sink_name
+            ]
+            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except Exception as e:
+        print(f"Error ensuring bt loopback: {e}")
 CACHED_BT_NAME = load_bluetooth_name()
 CACHED_HOSTNAME = socket.gethostname()
 CACHED_FQDN = f"{CACHED_HOSTNAME}.local"
@@ -603,10 +633,13 @@ def connect_bt_device(mac):
         combined_out = (res.stdout + " " + res.stderr).strip()
         
         if "Successful" in res.stdout or "Connection successful" in res.stdout or res.returncode == 0:
-            ensure_bt_loopback()
+            time.sleep(1.5)
+            ensure_bt_loopback(force_restart=True)
             return True, f"接続に成功しました ({mac})"
         
         if "Failed to connect" in combined_out:
+            if "page-timeout" in combined_out.lower():
+                return False, "接続できませんでした。イヤホンの電源が入っているか（ケースから取り出しているか）、接続待機状態かご確認ください"
             if "org.bluez.Error.Failed" in combined_out or "not available" in combined_out.lower():
                 return False, "接続できませんでした（オーディオ非対応機器であるか、プロファイルが見つかりません）"
             return False, f"接続失敗: {combined_out}"
@@ -626,25 +659,49 @@ def disconnect_bt_device(mac=None):
         if mac:
             cmd.append(mac)
         res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=5)
+        # ループバックもクリーンアップ停止
+        subprocess.run(["killall", "-9", "pw-loopback"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True, "切断しました"
     except Exception as e:
         return False, str(e)
 
 def get_paired_bt_devices():
     """
-    ペアリング済み（保存済み）のBluetooth機器一覧を取得
+    ペアリング済み・登録済み（保存済み）のBluetooth機器一覧を取得
+    BlueZ 5.82以降の 'devices Paired', 'devices Trusted' および旧 'paired-devices' を全網羅
     """
     devices = []
     try:
-        res = subprocess.run(["bluetoothctl", "paired-devices"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=2)
-        for line in res.stdout.splitlines():
+        raw_lines = []
+        # 1. 'devices Paired'
+        res_p = subprocess.run(["bluetoothctl", "devices", "Paired"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=2)
+        if res_p.returncode == 0 and res_p.stdout:
+            raw_lines.extend([l for l in res_p.stdout.splitlines() if l.strip().startswith("Device ")])
+        
+        # 2. 'devices Trusted' (切断時も保持される登録済み機器)
+        res_t = subprocess.run(["bluetoothctl", "devices", "Trusted"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=2)
+        if res_t.returncode == 0 and res_t.stdout:
+            raw_lines.extend([l for l in res_t.stdout.splitlines() if l.strip().startswith("Device ")])
+        
+        # 3. フォールバック: 旧 BlueZ 向け 'paired-devices'
+        if not raw_lines:
+            res_old = subprocess.run(["bluetoothctl", "paired-devices"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=2)
+            if res_old.returncode == 0 and res_old.stdout:
+                raw_lines.extend([l for l in res_old.stdout.splitlines() if l.strip().startswith("Device ")])
+        
+        seen_macs = set()
+        for line in raw_lines:
             parts = line.strip().split(maxsplit=2)
             if len(parts) >= 2 and parts[0] == "Device":
                 mac = parts[1].strip()
+                if mac in seen_macs:
+                    continue
+                seen_macs.add(mac)
                 name = parts[2].strip() if len(parts) >= 3 else ""
                 
                 resolved_name = name
                 is_audio = False
+                is_connected = False
                 try:
                     info_res = subprocess.run(["bluetoothctl", "info", mac], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, timeout=1.5)
                     info_alias = ""
@@ -658,6 +715,9 @@ def get_paired_bt_devices():
                             info_alias = iline_str.split(":", 1)[1].strip()
                         elif iline_str.startswith("Icon:"):
                             icon = iline_str.split(":", 1)[1].strip()
+                        elif iline_str.startswith("Connected:"):
+                            if "yes" in iline_str.lower():
+                                is_connected = True
                         elif iline_str.startswith("Class:"):
                             c_val = iline_str.split(":", 1)[1].strip()
                             if any(c in c_val.lower() for c in ["0x24", "0x20", "0x26"]):
@@ -676,7 +736,8 @@ def get_paired_bt_devices():
                 devices.append({
                     "mac": mac,
                     "name": resolved_name,
-                    "is_audio": is_audio
+                    "is_audio": is_audio,
+                    "connected": is_connected
                 })
     except Exception as e:
         print(f"Error fetching paired devices: {e}")
@@ -1317,6 +1378,10 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 if __name__ == "__main__":
     print(f"Bluetooth Device Name (cached): {CACHED_BT_NAME}")
+    try:
+        ensure_bt_loopback()
+    except Exception:
+        pass
     server = ThreadingHTTPServer(("0.0.0.0", PORT), RequestHandler)
     print(f"Recorder Web server running on port {PORT}...")
     try:
