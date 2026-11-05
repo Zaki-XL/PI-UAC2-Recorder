@@ -939,8 +939,10 @@ async function loadBtPaired() {
     let html = '';
     list.forEach(dev => {
       const isAudio = dev.is_audio === true;
+      const isConnected = dev.connected === true;
       const icon = isAudio ? '🎧' : '📶';
       const audioBadge = isAudio ? '<span style="background:#1e3a8a; color:#93c5fd; padding:1px 5px; border-radius:4px; font-size:10px; margin-left:6px; font-weight:600;">イヤホン/オーディオ</span>' : '';
+      const connBadge = isConnected ? '<span style="background:#064e3b; color:#6ee7b7; padding:1px 5px; border-radius:4px; font-size:10px; margin-left:4px; font-weight:600;">接続中</span>' : '';
 
       html += `
         <div class="sub-list-item" style="padding:10px 12px;">
@@ -949,11 +951,12 @@ async function loadBtPaired() {
               <span>${icon}</span>
               <span style="font-weight:700; color:#fff;">${escapeHtml(dev.name)}</span>
               ${audioBadge}
+              ${connBadge}
             </div>
             <div style="font-size:10px; color:var(--muted); margin-top:2px;">MAC: ${dev.mac}</div>
           </div>
           <div style="display:flex; gap:6px; align-items:center;">
-            <button class="btn-sub-action" onclick="connectBt('${dev.mac}', '${escapeJs(dev.name)}')">接続</button>
+            ${isConnected ? `<button class="btn-sub-action btn-sub-del" onclick="disconnectBt('${dev.mac}')">切断</button>` : `<button class="btn-sub-action" onclick="connectBt('${dev.mac}', '${escapeJs(dev.name)}')">接続</button>`}
             <button class="btn-sub-action btn-sub-del" style="padding:5px 8px;" title="ペアリング解除" onclick="removeBtPaired('${dev.mac}', '${escapeJs(dev.name)}')">🗑️</button>
           </div>
         </div>
